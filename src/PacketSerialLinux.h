@@ -1,5 +1,5 @@
 // =============================================================================
-// Copyright (c) 2013 Christopher Baker <http://christopherbaker.net>
+// Copyright (c) 2016 Gregory Izatt, MIT Hyperloop Team
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -21,13 +21,17 @@
 //
 // =============================================================================
 
-
 #pragma once
 
-
-#include <Arduino.h>
 #include "Encoding/COBS.h"
 
+#include <SerialStream.h>
+#include <iostream>
+#include <unistd.h>
+#include <cstdlib>
+
+
+using namespace LibSerial ;
 
 template<typename EncoderType, uint8_t PacketMarker = 0, int BufferSize = 256>
 class PacketSerial_
@@ -46,31 +50,66 @@ public:
     {
     }
 
-    void begin(unsigned long baud, size_t port = 0)
-    {
-        switch(port) 
+    bool begin(unsigned long baud, char * port)
+    {       
+        //
+        // Open the serial port.
+        // ;
+        _serial = new SerialStream();
+        _serial->Open( port );  
+        if ( ! _serial->good() ) 
         {
-        #if defined(UBRR1H)
-            case 1:
-                Serial1.begin(baud);
-                _serial = &Serial1;
-                break;
-        #endif
-        #if defined(UBRR2H)
-            case 2:
-                Serial2.begin(baud);
-                _serial = &Serial2;
-                break;
-        #endif
-        #if defined(UBRR3H)
-            case 3:
-                Serial3.begin(baud);
-                _serial = &Serial3;
-                break;
-        #endif
-            default:
-                Serial.begin(baud);
-                _serial = &Serial;
+            std::cerr << "[" << __FILE__ << ":" << __LINE__ << "] "
+                      << "Error: Could not open serial port." 
+                      << std::endl ;
+            exit(1) ;
+        }
+        //
+        // Set the baud rate of the serial port.
+        //
+        _serial->SetBaudRate( SerialStreamBuf::BAUD_115200 ) ;
+        if ( ! _serial->good() ) 
+        {
+            std::cerr << "Error: Could not set the baud rate." << std::endl ;
+            exit(1) ;
+        }
+        //
+        // Set the number of data bits.
+        //
+        _serial->SetCharSize( SerialStreamBuf::CHAR_SIZE_8 ) ;
+        if ( ! _serial->good() ) 
+        {
+            std::cerr << "Error: Could not set the character size." << std::endl ;
+            exit(1) ;
+        }
+        //
+        // Disable parity.
+        //
+        _serial->SetParity( SerialStreamBuf::PARITY_NONE ) ;
+        if ( ! _serial->good() ) 
+        {
+            std::cerr << "Error: Could not disable the parity." << std::endl ;
+            exit(1) ;
+        }
+        //
+        // Set the number of stop bits.
+        //
+        _serial->SetNumOfStopBits( 1 ) ;
+        if ( ! _serial->good() ) 
+        {
+            std::cerr << "Error: Could not set the number of stop bits."
+                      << std::endl ;
+            exit(1) ;
+        }
+        //
+        // Turn off hardware flow control.
+        //
+        _serial->SetFlowControl( SerialStreamBuf::FLOW_CONTROL_NONE ) ;
+        if ( ! _serial->good() ) 
+        {
+            std::cerr << "Error: Could not use hardware flow control."
+                      << std::endl ;
+            exit(1) ;
         }
     }
 
@@ -78,10 +117,11 @@ public:
     {
         if (_serial == 0) return;
 
-        while (_serial->available() > 0)
+        while (_serial->rdbuf()->in_avail() > 0)
         {
-            uint8_t data = _serial->read();
-
+            char charin;
+            _serial->get(charin);
+            uint8_t data = (uint8_t) charin;
             if (data == PacketMarker)
             {
                 if (_onPacketFunction) 
@@ -122,7 +162,8 @@ public:
                                                     _encodeBuffer);
 
             _serial->write(_encodeBuffer, numEncoded);
-            _serial->write(PacketMarker);
+            char marker = (char) PacketMarker;
+            _serial->write(&marker, 1);
     }
 
     void setPacketHandler(PacketHandlerFunction onPacketFunction)
@@ -137,8 +178,8 @@ private:
 
     uint8_t _recieveBuffer[BufferSize];
     size_t _recieveBufferIndex;
-    
-    Stream* _serial;
+        
+    SerialStream * _serial;
     
     PacketHandlerFunction _onPacketFunction;
 
