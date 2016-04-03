@@ -32,12 +32,13 @@ template<typename EncoderType, uint8_t PacketMarker = 0, int BufferSize = 256>
 class PacketSerial_
 {
 public:
-    typedef void (*PacketHandlerFunction)(const uint8_t* buffer, size_t size);
+    typedef void (*PacketHandlerFunction)(const uint8_t* buffer, size_t size, void * extra);
 
     PacketSerial_():
         _recieveBufferIndex(0),
         _serial(0),
-        _onPacketFunction(0)
+        _onPacketFunction(0),
+        _extraArg(0)
     {
     }
 
@@ -91,7 +92,7 @@ public:
                                                             _recieveBufferIndex, 
                                                             _decodeBuffer);
 
-                    _onPacketFunction(_decodeBuffer, numDecoded);
+                    _onPacketFunction(_decodeBuffer, numDecoded, _extraArg);
                 }
 
                 _recieveBufferIndex = 0;
@@ -124,9 +125,10 @@ public:
             _serial->write(PacketMarker);
     }
 
-    void setPacketHandler(PacketHandlerFunction onPacketFunction)
+    void setPacketHandler(PacketHandlerFunction onPacketFunction, void * extra)
     {
         _onPacketFunction = onPacketFunction;
+        _extraArg = extra;
     }
     
 
@@ -140,6 +142,7 @@ private:
     Stream* _serial;
     
     PacketHandlerFunction _onPacketFunction;
+    void * _extraArg;
 
 };
 
